@@ -35,6 +35,40 @@ Run:
 python oce_youtube_creator_exporter.py
 ```
 
+## Clone and run on another PC
+
+1. Clone the repo:
+
+```bash
+git clone https://github.com/seo665/oce_youtube_creator_exporter.git
+cd oce_youtube_creator_exporter
+```
+
+2. Create and activate the Python virtual environment:
+
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+```
+
+3. Install dependencies:
+
+```powershell
+pip install -r requirements.txt
+```
+
+4. Create a `.env` file with your API key:
+
+```text
+YOUTUBE_API_KEY=your_api_key_here
+```
+
+5. Run the tool:
+
+```powershell
+python oce_youtube_creator_exporter.py
+```
+
 ## Output files
 
 Inside the `/exports` folder:
