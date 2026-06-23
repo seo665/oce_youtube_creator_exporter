@@ -60,18 +60,28 @@ MAX_PAGES_PER_QUERY = 1
 MAX_RESULTS_PER_PAGE = 25
 SLEEP_BETWEEN_REQUESTS = 0.15
 
-# Keyword batch 2 for onlinececredits.com - fresh keywords not yet tested.
+# Keyword batch 3 for onlinececredits.com - diverse therapy modalities.
 KEYWORDS = [
-    "psychology CE credits online",
-    "clinical social worker CE online",
-    "marriage and family therapy CE",
-    "substance abuse counselor training",
-    "grief counseling training",
-    "anxiety disorder treatment training",
-    "depression treatment CE",
-    "addiction counseling continuing education",
-    "couples therapy continuing education",
-    "child psychology CE credits",
+    "DBT dialectical behavior therapy training",
+    "somatic therapy continuing education",
+    "EFT emotionally focused therapy CE",
+    "solution focused therapy training",
+    "gestalt therapy CE credits",
+    "psychodynamic therapy training",
+    "motivational interviewing CE",
+    "mindfulness meditation therapy",
+    "transpersonal psychology CE",
+    "art therapy certification",
+    "play therapy continuing education",
+    "narrative therapy CE credits",
+    "ACT acceptance commitment therapy",
+    "schema therapy training",
+    "internal family systems IFS",
+    "hypnotherapy certification",
+    "neurofeedback training",
+    "trauma informed care CE",
+    "PTSD treatment training",
+    "self-compassion therapy CE",
 ]
 
 REGION_CODES = ["US"]  # Using US only to reduce quota usage.
