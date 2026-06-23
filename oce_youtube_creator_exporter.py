@@ -165,6 +165,8 @@ def extract_emails(text: str) -> Tuple[List[str], str]:
     cleaned = []
     for email in found:
         e = email.strip(".,;:()[]{}<>").lower()
+        # Remove www. from domain part if present
+        e = re.sub(r"@www\.", "@", e)
         if len(e) > 5 and not e.endswith((".png", ".jpg", ".jpeg", ".webp")):
             cleaned.append(e)
 
