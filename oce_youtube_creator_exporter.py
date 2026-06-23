@@ -60,18 +60,18 @@ MAX_PAGES_PER_QUERY = 1
 MAX_RESULTS_PER_PAGE = 25
 SLEEP_BETWEEN_REQUESTS = 0.15
 
-# Keyword batch for onlinececredits.com testing.
+# Keyword batch 2 for onlinececredits.com - fresh keywords not yet tested.
 KEYWORDS = [
-    "online CE credits for therapists",
-    "therapist continuing education online",
-    "mental health CE courses online",
-    "continuing education for social workers",
-    "continuing education for counselors",
-    "EMDR continuing education online",
-    "CBT continuing education credits",
-    "LPC continuing education online",
-    "LMFT CE credits online",
-    "trauma therapy continuing education",
+    "psychology CE credits online",
+    "clinical social worker CE online",
+    "marriage and family therapy CE",
+    "substance abuse counselor training",
+    "grief counseling training",
+    "anxiety disorder treatment training",
+    "depression treatment CE",
+    "addiction counseling continuing education",
+    "couples therapy continuing education",
+    "child psychology CE credits",
 ]
 
 REGION_CODES = ["US"]  # Using US only to reduce quota usage.
