@@ -58,7 +58,8 @@ OUTPUT_DIR = "exports"
 # Use 25 per request so each keyword returns 25 channel + 25 video results.
 MAX_PAGES_PER_QUERY = 1
 MAX_RESULTS_PER_PAGE = 25
-SLEEP_BETWEEN_REQUESTS = 0.15
+SLEEP_BETWEEN_REQUESTS = 1.0  # Increased from 0.15s to throttle API calls
+MAX_RETRIES = 3  # Retry failed requests up to 3 times with exponential backoff
 
 # Keyword batch 4 for onlinececredits.com - 50 diverse keywords across coaching, wellness, and specialized modalities.
 KEYWORDS = [
@@ -142,12 +143,43 @@ OCE_FIT_TERMS = [
 
 
 def request_get(url: str, params: Dict[str, Any]) -> Dict[str, Any]:
+    """Make API request with exponential backoff on rate limit errors."""
     params["key"] = YOUTUBE_API_KEY
-    r = requests.get(url, params=params, timeout=30)
-    if not r.ok:
-        raise RuntimeError(f"API error {r.status_code}: {r.text[:1000]}")
-    time.sleep(SLEEP_BETWEEN_REQUESTS)
-    return r.json()
+    
+    for attempt in range(MAX_RETRIES):
+        try:
+            r = requests.get(url, params=params, timeout=30)
+            
+            # Check for rate limit error (429)
+            if r.status_code == 429:
+                if attempt < MAX_RETRIES - 1:
+                    # Exponential backoff: 2s, 4s, 8s
+                    wait_time = 2 ** (attempt + 1)
+                    print(f"    Rate limited. Waiting {wait_time}s before retry (attempt {attempt + 1}/{MAX_RETRIES})...")
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    # Max retries exceeded
+                    raise RuntimeError(f"API error {r.status_code}: Quota exceeded after {MAX_RETRIES} retries")
+            
+            # Check for other errors
+            if not r.ok:
+                raise RuntimeError(f"API error {r.status_code}: {r.text[:1000]}")
+            
+            # Success - wait before returning
+            time.sleep(SLEEP_BETWEEN_REQUESTS)
+            return r.json()
+            
+        except requests.exceptions.RequestException as e:
+            if attempt < MAX_RETRIES - 1:
+                wait_time = 2 ** (attempt + 1)
+                print(f"    Request failed: {e}. Waiting {wait_time}s before retry...")
+                time.sleep(wait_time)
+                continue
+            else:
+                raise RuntimeError(f"Request failed after {MAX_RETRIES} retries: {e}")
+    
+    raise RuntimeError("Unexpected error in request_get")
 
 
 def clean_text(value: Optional[str]) -> str:
