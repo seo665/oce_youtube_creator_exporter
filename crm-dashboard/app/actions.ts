@@ -173,7 +173,7 @@ export async function inviteWorker(inputEmail: string) {
   }
 
   const { error } = await admin.auth.admin.inviteUserByEmail(email, {
-    redirectTo: `${appUrl}/auth/callback`,
+    redirectTo: `${appUrl}/auth/callback?next=/auth/update-password`,
   });
 
   if (error) {

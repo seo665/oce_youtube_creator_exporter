@@ -4,7 +4,7 @@ Private CRM for the single OnlyFans-related YouTube search run from November 5, 
 
 ## What is included
 
-- Email magic-link sign-in for invited accounts only.
+- Email-and-password sign-in for invited accounts only, with email-based password setup and recovery.
 - Admin and worker roles. Admins see every lead and can assign leads; workers see and update only leads assigned to them.
 - Search and status filters, lead details, team notes, assignment, and follow-up dates.
 - Due and overdue follow-ups are highlighted in the dashboard. The app does not send reminder or outreach emails.
@@ -27,7 +27,7 @@ Do not send passwords, Supabase keys, or SMTP credentials in chat. The service-r
 2. In the Supabase SQL Editor, run `supabase/schema.sql`.
 3. In Authentication settings, disable public sign-ups. The admin will invite any workers.
 4. Add the deployed app URL to Authentication's site URL and redirect URL allow-list. Include the callback URL ending in `/auth/callback`.
-5. Invite the admin email from Supabase Authentication → Users. The database trigger creates a worker profile for invited users by default.
+5. Invite the admin email from Supabase Authentication → Users. Use the app's callback URL with `?next=/auth/update-password` as the invite redirect so the admin can set a password after verifying the email. The database trigger creates a worker profile for invited users by default.
 6. Promote the admin profile in the SQL Editor, replacing the example with the admin's complete email:
 
    ```sql
@@ -36,7 +36,7 @@ Do not send passwords, Supabase keys, or SMTP credentials in chat. The service-r
    where lower(email) = lower('admin@example.com');
    ```
 
-The admin can invite the worker from the CRM once signed in. Worker profiles are created automatically and cannot grant themselves admin access.
+The admin can invite the worker from the CRM once signed in. The worker follows the invitation link to set an initial password. Worker profiles are created automatically and cannot grant themselves admin access. Existing accounts can use “Forgot or need to set your password?” on the sign-in page to set or recover their password.
 
 ## Local development
 
