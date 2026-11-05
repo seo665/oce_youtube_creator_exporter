@@ -1,14 +1,14 @@
 # Creator CRM
 
-Private CRM for the single OnlyFans-related YouTube search run from November 5, 2026. The app does not import historical search files automatically; the admin imports only `oce_youtube_creator_leads_2026-11-05_13-10-16.csv` from the existing `exports` folder.
+Private workspace for running YouTube creator research campaigns and organizing the resulting leads. Admins can group up to 30 search phrases into a campaign; each phrase is searched through the official YouTube Data API, and results are saved as the campaign runs so an interrupted campaign can be resumed.
 
 ## What is included
 
 - Email-and-password sign-in for invited accounts only, with email-based password setup and recovery.
 - Admin and worker roles. Admins see every lead and can assign leads; workers see and update only leads assigned to them.
-- Search and status filters, including a split between leads with a listed public email and leads needing manual email research. CSV exports follow the active filters.
-- Lead details, team notes, assignment, and follow-up dates.
-- Due and overdue follow-ups are highlighted in the dashboard. The app does not send reminder or outreach emails.
+- Search and status filters, including a split between leads with a listed public email and leads needing manual email research. Separate filters flag repeat creators and put results whose matched titles/descriptions do not mention “OnlyFans” into a relevance-review bucket. Search phrases themselves do not determine this classification, and review leads remain in the pool. CSV exports follow the active filters and include duplicate and relevance labels.
+- Campaign history records the phrases used, completion progress, lead totals, and duplicate matches.
+- Public emails are extracted only from YouTube channel descriptions. The app does not verify email addresses or send outreach.
 - CSV export for the records visible to the signed-in user.
 - Row-level security in Supabase; the service-role key is used only by the server to send worker invitations.
 
@@ -25,7 +25,7 @@ Do not send passwords, Supabase keys, or SMTP credentials in chat. The service-r
 ## Supabase setup
 
 1. Create a Supabase project and choose a region appropriate for your users.
-2. In the Supabase SQL Editor, run `supabase/schema.sql`.
+2. In the Supabase SQL Editor, run `supabase/schema.sql`. If the existing CRM is already set up, run the updated schema again to add the campaign tables and fields.
 3. In Authentication settings, disable public sign-ups. The admin will invite any workers.
 4. Add the deployed app URL to Authentication's site URL and redirect URL allow-list. Include the callback URL ending in `/auth/callback`.
 5. Invite the admin email from Supabase Authentication → Users. Use the app's callback URL with `?next=/auth/update-password` as the invite redirect so the admin can set a password after verifying the email. The database trigger creates a worker profile for invited users by default.
@@ -55,7 +55,10 @@ NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-server-only-service-role-key
 NEXT_PUBLIC_APP_URL=http://localhost:3000
+YOUTUBE_API_KEY=your-server-only-youtube-data-api-key
 ```
+
+Enable the YouTube Data API v3 in Google Cloud and create an API key with access to that API. Keep the key server-only; never use a `NEXT_PUBLIC_` prefix or paste the key into chat. YouTube search requests use about 100 quota units each, plus a small amount for channel metadata. Searching both channels and videos uses about 200 units per phrase. The campaign form displays an estimate before starting.
 
 Run the app:
 
@@ -69,12 +72,12 @@ Open `http://localhost:3000`.
 
 1. Import this GitHub repository into Vercel.
 2. Set **Root Directory** to `crm-dashboard`.
-3. Add the four environment variables listed above. For `NEXT_PUBLIC_APP_URL`, use the deployed Vercel URL.
+3. Add the Supabase and app URL variables above, plus `YOUTUBE_API_KEY`, to Vercel's server environment variables. For `NEXT_PUBLIC_APP_URL`, use the deployed Vercel URL.
 4. Deploy, then update Supabase's site URL and callback allow-list to use that URL.
-5. Sign in as the admin and import **only** `exports/oce_youtube_creator_leads_2026-11-05_13-10-16.csv`. The CRM rejects other filenames; duplicate channel IDs are skipped without overwriting existing notes or assignments.
+5. Sign in as the admin and create a campaign. Paste one phrase per line, choose the search mode and result limit, then start. Completed phrases are saved individually; resume an interrupted campaign from Campaign history.
 6. Invite the worker from the CRM when their full email address is available.
 
-The CSV and its public contact details are not bundled into the application or committed to the repository. They are inserted into the private Supabase database after an admin uploads the file. Only public creator contact information is present in the search export; follow applicable privacy rules and each creator's contact preferences.
+Campaigns keep a unique lead for each YouTube channel. When the same channel appears in a later campaign, the app increments its campaign count and marks it as a repeat; matches found again within one campaign add search phrases without inflating the repeat count. Matched result titles and descriptions are retained across searches so the relevance-review bucket considers the channel’s accumulated search matches.
 
 ## Validation
 

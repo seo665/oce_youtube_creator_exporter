@@ -4,9 +4,9 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { saveLead } from "@/app/actions";
 import InviteWorkerForm from "@/components/invite-worker-form";
-import LeadImport from "@/components/lead-import";
+import ScrapeCampaignForm from "@/components/scrape-campaign-form";
 import { createClient } from "@/lib/supabase/client";
-import type { CrmProfile, Lead, LeadStatus } from "@/lib/types";
+import { mentionsOnlyFansInSearchMatch, type CrmProfile, type Lead, type LeadStatus, type ScrapeCampaign } from "@/lib/types";
 
 const statusLabels: Record<LeadStatus, string> = {
   new: "New",
@@ -23,57 +23,62 @@ type Props = {
   currentUser: CrmProfile;
   leads: Lead[];
   profiles: CrmProfile[];
+  campaigns: ScrapeCampaign[];
 };
 
 type EmailFilter = "all" | "has_email" | "manual_check";
+type DuplicateFilter = "all" | "duplicates" | "new";
+type RelevanceFilter = "all" | "mentions_onlyfans" | "needs_review";
 
-export default function Dashboard({ currentUser, leads: initialLeads, profiles }: Props) {
+export default function Dashboard({ currentUser, leads: initialLeads, profiles, campaigns }: Props) {
   const router = useRouter();
   const [leads, setLeads] = useState(initialLeads);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [emailFilter, setEmailFilter] = useState<EmailFilter>("all");
-  const [followUpOnly, setFollowUpOnly] = useState(false);
+  const [duplicateFilter, setDuplicateFilter] = useState<DuplicateFilter>("all");
+  const [relevanceFilter, setRelevanceFilter] = useState<RelevanceFilter>("all");
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState("");
   const [error, setError] = useState("");
 
   const isAdmin = currentUser.role === "admin";
-  const today = localDate();
   const selectedLead = leads.find((lead) => lead.id === selectedId) ?? null;
-  const dueCount = leads.filter(
-    (lead) => lead.follow_up_date && lead.follow_up_date <= today && !isClosed(lead.crm_status),
-  ).length;
   const emailCount = leads.filter((lead) => hasPublicEmail(lead)).length;
   const manualCheckCount = leads.length - emailCount;
+  const duplicateCount = leads.filter((lead) => lead.scrape_count > 1).length;
+  const relevanceReviewCount = leads.filter((lead) => !mentionsOnlyFansInSearchMatch(lead)).length;
   const filteredLeads = useMemo(() => {
     const query = search.trim().toLowerCase();
     return leads.filter((lead) => {
       if (statusFilter !== "all" && lead.crm_status !== statusFilter) return false;
       if (emailFilter === "has_email" && !hasPublicEmail(lead)) return false;
       if (emailFilter === "manual_check" && hasPublicEmail(lead)) return false;
-      if (followUpOnly && (!lead.follow_up_date || lead.follow_up_date > today || isClosed(lead.crm_status))) {
-        return false;
-      }
+      if (duplicateFilter === "duplicates" && lead.scrape_count <= 1) return false;
+      if (duplicateFilter === "new" && lead.scrape_count > 1) return false;
+      const hasOnlyFansMatch = mentionsOnlyFansInSearchMatch(lead);
+      if (relevanceFilter === "mentions_onlyfans" && !hasOnlyFansMatch) return false;
+      if (relevanceFilter === "needs_review" && hasOnlyFansMatch) return false;
       if (!query) return true;
       const haystack = [
         lead.channel_name,
         lead.public_email,
         lead.channel_id,
         lead.data.source_keywords_all,
+        lead.data.matched_titles_all,
+        lead.data.matched_descriptions_all,
         lead.data.channel_description,
       ]
         .join(" ")
         .toLowerCase();
       return haystack.includes(query);
     });
-  }, [emailFilter, followUpOnly, leads, search, statusFilter, today]);
+  }, [duplicateFilter, emailFilter, leads, relevanceFilter, search, statusFilter]);
 
   async function handleSave(input: {
     status: LeadStatus;
     notes: string;
-    followUpDate: string;
     assignedTo: string;
   }) {
     if (!selectedLead) return;
@@ -93,7 +98,6 @@ export default function Dashboard({ currentUser, leads: initialLeads, profiles }
                 ...lead,
                 crm_status: input.status,
                 notes: input.notes,
-                follow_up_date: input.followUpDate || null,
                 assigned_to: isAdmin ? input.assignedTo || null : lead.assigned_to,
                 updated_at: new Date().toISOString(),
               }
@@ -123,16 +127,26 @@ export default function Dashboard({ currentUser, leads: initialLeads, profiles }
     const sourceColumns = Array.from(
       new Set(filteredLeads.flatMap((lead) => Object.keys(lead.data))),
     );
-    const headers = [...sourceColumns, "crm_status", "assigned_to", "crm_notes", "follow_up_date"];
+    const headers = [
+      ...sourceColumns,
+      "scrape_count",
+      "is_duplicate",
+      "match_relevance",
+      "crm_status",
+      "assigned_to",
+      "crm_notes",
+    ];
     const csvRows = [
       headers,
       ...filteredLeads.map((lead) => [
         ...sourceColumns.map((column) => lead.data[column] ?? ""),
+        lead.scrape_count,
+        lead.scrape_count > 1 ? "yes" : "no",
+        mentionsOnlyFansInSearchMatch(lead) ? "mentions OnlyFans" : "needs relevance review",
         lead.crm_status,
         profiles.find((profile) => profile.id === lead.assigned_to)?.email ??
           (lead.assigned_to === currentUser.id ? currentUser.email : ""),
         lead.notes,
-        lead.follow_up_date ?? "",
       ]),
     ];
     const csv = csvRows
@@ -150,13 +164,12 @@ export default function Dashboard({ currentUser, leads: initialLeads, profiles }
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    const exportName =
-      emailFilter === "has_email"
-        ? "creator-crm-public-emails.csv"
-        : emailFilter === "manual_check"
-          ? "creator-crm-manual-email-check.csv"
-          : "creator-crm-leads.csv";
-    link.download = exportName;
+    const exportParts = [
+      emailFilter === "has_email" ? "public-emails" : emailFilter === "manual_check" ? "manual-email-check" : "",
+      relevanceFilter === "needs_review" ? "relevance-review" : relevanceFilter === "mentions_onlyfans" ? "onlyfans-matches" : "",
+      duplicateFilter === "duplicates" ? "duplicates" : duplicateFilter === "new" ? "single-campaign" : "",
+    ].filter(Boolean);
+    link.download = `creator-crm-${exportParts.length ? exportParts.join("-") : "leads"}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   }
@@ -177,22 +190,10 @@ export default function Dashboard({ currentUser, leads: initialLeads, profiles }
           <span className="nav-icon">▦</span> Leads
           <span className="nav-count">{leads.length}</span>
         </a>
-        <button
-          className={`nav-link ${followUpOnly ? "nav-link-active" : ""}`}
-          type="button"
-          onClick={() => {
-            setFollowUpOnly((value) => !value);
-            document.getElementById("leads")?.scrollIntoView({ behavior: "smooth" });
-          }}
-        >
-          <span className="nav-icon">◷</span> Follow-ups
-          {dueCount > 0 && <span className="nav-count nav-count-alert">{dueCount}</span>}
-        </button>
 
         <div className="sidebar-bottom">
           {isAdmin && (
             <>
-              <LeadImport />
               <InviteWorkerForm />
             </>
           )}
@@ -212,7 +213,7 @@ export default function Dashboard({ currentUser, leads: initialLeads, profiles }
       <section className="workspace">
         <header className="topbar">
           <div className="breadcrumb">Workspace <span>/</span> Leads</div>
-          <div className="run-chip"><i /> Last search · Nov 5, 2026</div>
+          <div className="run-chip"><i /> YouTube campaign workspace</div>
         </header>
 
         <div className="page-content">
@@ -220,7 +221,7 @@ export default function Dashboard({ currentUser, leads: initialLeads, profiles }
             <div>
               <span className="eyebrow">OnlyFans creator search</span>
               <h1>Leads</h1>
-              <p>One focused search run, ready for your team to qualify and follow up.</p>
+              <p>Run grouped YouTube searches, review public email coverage, spot repeat creators, and triage uncertain matches.</p>
             </div>
             <button className="button button-secondary export-button" onClick={exportLeads} disabled={!filteredLeads.length}>
               <span>↓</span> Export CSV
@@ -228,31 +229,21 @@ export default function Dashboard({ currentUser, leads: initialLeads, profiles }
           </section>
 
           <section className="stats-grid" aria-label="Lead summary">
-            <StatCard label="Total leads" value={leads.length.toLocaleString()} icon="▦" detail="From the latest search" />
+            <StatCard label="Total leads" value={leads.length.toLocaleString()} icon="▦" detail="Combined across campaigns" />
             <StatCard label="Public emails" value={emailCount.toLocaleString()} icon="✉" detail="Listed publicly by creators" />
             <StatCard label="Manual email check" value={manualCheckCount.toLocaleString()} icon="⌕" detail="No public email listed" />
-            <StatCard label="Needs follow-up" value={dueCount.toLocaleString()} icon="◷" detail="Due today or overdue" accent={dueCount > 0} />
+            <StatCard label="Repeat creators" value={duplicateCount.toLocaleString()} icon="↻" detail="Found in multiple campaigns" accent={duplicateCount > 0} />
+            <StatCard label="Relevance review" value={relevanceReviewCount.toLocaleString()} icon="?" detail="Matched result lacks “OnlyFans”" accent={relevanceReviewCount > 0} />
           </section>
 
-          {dueCount > 0 && !followUpOnly && (
-            <button className="followup-banner" onClick={() => setFollowUpOnly(true)}>
-              <span className="banner-icon">◷</span>
-              <span><strong>{dueCount} follow-up{dueCount === 1 ? "" : "s"} due</strong> — review the next steps your team scheduled.</span>
-              <span className="banner-action">View follow-ups →</span>
-            </button>
-          )}
+          {isAdmin && <ScrapeCampaignForm campaigns={campaigns} />}
 
           <section className="lead-panel" id="leads">
             <div className="panel-heading">
               <div>
                 <h2>Creator leads <span className="heading-count">{filteredLeads.length}</span></h2>
-                <p>Separate leads with a listed email from those needing manual contact research.</p>
+                <p>Filter by public email, repeat campaigns, and whether matched YouTube results mention “OnlyFans.”</p>
               </div>
-              {followUpOnly && (
-                <button className="text-button clear-filter" onClick={() => setFollowUpOnly(false)}>
-                  Clear follow-up filter ×
-                </button>
-              )}
             </div>
 
             <div className="filters-row">
@@ -274,13 +265,28 @@ export default function Dashboard({ currentUser, leads: initialLeads, profiles }
                 </select>
               </label>
               <label className="filter-select">
+                <span>Relevance</span>
+                <select value={relevanceFilter} onChange={(event) => setRelevanceFilter(event.target.value as RelevanceFilter)}>
+                  <option value="all">All matches</option>
+                  <option value="mentions_onlyfans">Mentions OnlyFans ({(leads.length - relevanceReviewCount).toLocaleString()})</option>
+                  <option value="needs_review">Needs review ({relevanceReviewCount.toLocaleString()})</option>
+                </select>
+              </label>
+              <label className="filter-select">
                 <span>Status</span>
                 <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
                   <option value="all">All statuses</option>
                   {statusOptions.map(([value, label]) => <option value={value} key={value}>{label}</option>)}
                 </select>
               </label>
-              {followUpOnly && <span className="filter-pill">Due now</span>}
+              <label className="filter-select">
+                <span>Campaigns</span>
+                <select value={duplicateFilter} onChange={(event) => setDuplicateFilter(event.target.value as DuplicateFilter)}>
+                  <option value="all">All creators</option>
+                  <option value="duplicates">Repeat creators ({duplicateCount.toLocaleString()})</option>
+                  <option value="new">Single campaign only</option>
+                </select>
+              </label>
             </div>
 
             {error && <p className="inline-alert error-message">{error}</p>}
@@ -290,9 +296,10 @@ export default function Dashboard({ currentUser, leads: initialLeads, profiles }
                   <tr>
                     <th>Creator</th>
                     <th>Public email</th>
+                    <th>Match</th>
                     <th>Status</th>
                     <th>Subscribers</th>
-                    <th>Follow-up</th>
+                    <th>Campaigns</th>
                     <th aria-label="Open lead" />
                   </tr>
                 </thead>
@@ -312,7 +319,10 @@ export default function Dashboard({ currentUser, leads: initialLeads, profiles }
                           <span className="creator-avatar">{initials(lead.channel_name)}</span>
                           <span className="creator-meta">
                             <strong>{lead.channel_name || "Unnamed channel"}</strong>
-                            <small>{lead.data.country || "YouTube creator"} · score {lead.lead_score}</small>
+                            <small>
+                              {lead.data.country || "YouTube creator"} · score {lead.lead_score}
+                              {lead.scrape_count > 1 && <span className="duplicate-badge">Repeat ×{lead.scrape_count}</span>}
+                            </small>
                           </span>
                         </div>
                       </td>
@@ -323,14 +333,19 @@ export default function Dashboard({ currentUser, leads: initialLeads, profiles }
                           </a>
                         ) : <span className="muted-text">Not listed</span>}
                       </td>
+                      <td>
+                        <span className={`relevance-badge ${mentionsOnlyFansInSearchMatch(lead) ? "relevance-match" : "relevance-review"}`}>
+                          {mentionsOnlyFansInSearchMatch(lead) ? "OnlyFans match" : "Review"}
+                        </span>
+                      </td>
                       <td><span className={`status-badge status-${lead.crm_status}`}>{statusLabels[lead.crm_status]}</span></td>
                       <td>{formatCount(lead.subscriber_count)}</td>
-                      <td>{lead.follow_up_date ? formatDate(lead.follow_up_date) : <span className="muted-text">—</span>}</td>
+                      <td>{lead.scrape_count > 1 ? `${lead.scrape_count} campaigns` : "1 campaign"}</td>
                       <td><button className="row-open" aria-label={`Open ${lead.channel_name}`}>→</button></td>
                     </tr>
                   ))}
                   {!filteredLeads.length && (
-                    <tr><td className="empty-row" colSpan={6}>No leads match these filters.</td></tr>
+                    <tr><td className="empty-row" colSpan={7}>No leads match these filters.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -378,11 +393,10 @@ function LeadDetails({
   feedback: string;
   error: string;
   onClose: () => void;
-  onSave: (input: { status: LeadStatus; notes: string; followUpDate: string; assignedTo: string }) => void;
+  onSave: (input: { status: LeadStatus; notes: string; assignedTo: string }) => void;
 }) {
   const [status, setStatus] = useState<LeadStatus>(lead.crm_status);
   const [notes, setNotes] = useState(lead.notes);
-  const [followUpDate, setFollowUpDate] = useState(lead.follow_up_date ?? "");
   const [assignedTo, setAssignedTo] = useState(lead.assigned_to ?? "");
   const data = lead.data;
 
@@ -414,7 +428,13 @@ function LeadDetails({
         <div className="detail-block">
           <span className="detail-label">Search match</span>
           <p>{data.source_keywords_all || "Keyword not recorded"}</p>
+          <span className={`relevance-badge ${mentionsOnlyFansInSearchMatch(lead) ? "relevance-match" : "relevance-review"}`}>
+            {mentionsOnlyFansInSearchMatch(lead)
+              ? "Matched content mentions OnlyFans"
+              : "Needs relevance review: matched content does not mention OnlyFans"}
+          </span>
           {data.matched_titles_all && <p className="detail-muted">{data.matched_titles_all}</p>}
+          {data.matched_descriptions_all && <p className="detail-muted">{data.matched_descriptions_all}</p>}
         </div>
 
         <div className="crm-edit">
@@ -423,9 +443,6 @@ function LeadDetails({
           <select id="lead-status" value={status} onChange={(event) => setStatus(event.target.value as LeadStatus)}>
             {statusOptions.map(([value, label]) => <option value={value} key={value}>{label}</option>)}
           </select>
-
-          <label htmlFor="lead-follow-up">Follow-up date</label>
-          <input id="lead-follow-up" type="date" value={followUpDate} onChange={(event) => setFollowUpDate(event.target.value)} />
 
           {isAdmin && (
             <>
@@ -453,11 +470,11 @@ function LeadDetails({
           <button
             className="button button-primary full-width"
             disabled={busy}
-            onClick={() => onSave({ status, notes, followUpDate, assignedTo })}
+            onClick={() => onSave({ status, notes, assignedTo })}
           >
             {busy ? "Saving…" : "Save changes"}
           </button>
-          <p className="privacy-hint">Follow-up reminders appear in this dashboard; no emails are sent automatically.</p>
+          <p className="privacy-hint">Email verification and outreach are handled outside this workspace.</p>
         </div>
       </aside>
     </>
@@ -472,15 +489,6 @@ function StatCard({ label, value, icon, detail, accent = false }: { label: strin
       <small>{detail}</small>
     </article>
   );
-}
-
-function localDate() {
-  const date = new Date();
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-}
-
-function isClosed(status: LeadStatus) {
-  return status === "not_interested" || status === "do_not_contact";
 }
 
 function initials(value: string) {
@@ -499,11 +507,6 @@ function hasPublicEmail(lead: Lead) {
 function formatCount(value: number | null) {
   if (value === null || !Number.isFinite(value)) return "—";
   return new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(value);
-}
-
-function formatDate(value: string) {
-  const date = new Date(`${value}T12:00:00`);
-  return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric" }).format(date);
 }
 
 function safeHttpUrl(value: string) {

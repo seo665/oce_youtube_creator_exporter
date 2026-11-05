@@ -42,7 +42,6 @@ export async function saveLead(input: {
   id: string;
   status: string;
   notes: string;
-  followUpDate: string;
   assignedTo: string;
 }) {
   if (
@@ -51,7 +50,6 @@ export async function saveLead(input: {
     !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.id) ||
     typeof input.status !== "string" ||
     typeof input.notes !== "string" ||
-    typeof input.followUpDate !== "string" ||
     typeof input.assignedTo !== "string"
   ) {
     throw new Error("Invalid lead update.");
@@ -66,26 +64,13 @@ export async function saveLead(input: {
   if (input.notes.length > 10_000) {
     throw new Error("Notes must be 10,000 characters or fewer.");
   }
-  if (input.followUpDate) {
-    const date = new Date(`${input.followUpDate}T00:00:00.000Z`);
-    if (
-      !/^\d{4}-\d{2}-\d{2}$/.test(input.followUpDate) ||
-      Number.isNaN(date.getTime()) ||
-      date.toISOString().slice(0, 10) !== input.followUpDate
-    ) {
-      throw new Error("Choose a valid follow-up date.");
-    }
-  }
-
   const update: {
     crm_status: LeadStatus;
     notes: string;
-    follow_up_date: string | null;
     assigned_to?: string | null;
   } = {
     crm_status: status,
     notes: input.notes,
-    follow_up_date: input.followUpDate || null,
   };
 
   if (user.role === "admin") {

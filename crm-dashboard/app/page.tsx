@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import Dashboard from "@/components/dashboard";
+import type { ScrapeCampaign } from "@/lib/types";
 import { createClient } from "@/lib/supabase/server";
 import type { CrmProfile, Lead } from "@/lib/types";
 
@@ -68,16 +69,28 @@ export default async function HomePage() {
   }
 
   let profiles: CrmProfile[] = [];
+  let campaigns: ScrapeCampaign[] = [];
   if (profile.role === "admin") {
-    const { data, error } = await supabase
+    const [{ data: profileData, error: profilesError }, { data: campaignData, error: campaignsError }] = await Promise.all([
+      supabase
       .from("profiles")
       .select("id, email, role")
-      .order("email");
+      .order("email"),
+      supabase
+        .from("scrape_campaigns")
+        .select("id, name, keywords, search_types, max_results, status, completed_keywords, unique_leads, new_leads, duplicates, created_at")
+        .order("created_at", { ascending: false })
+        .limit(25),
+    ]);
 
-    if (error) {
-      throw new Error(`Could not load workspace users: ${error.message}`);
+    if (profilesError) {
+      throw new Error(`Could not load workspace users: ${profilesError.message}`);
     }
-    profiles = (data ?? []) as CrmProfile[];
+    if (campaignsError) {
+      throw new Error(`Could not load scrape campaigns: ${campaignsError.message}`);
+    }
+    profiles = (profileData ?? []) as CrmProfile[];
+    campaigns = (campaignData ?? []) as ScrapeCampaign[];
   }
 
   return (
@@ -89,6 +102,7 @@ export default async function HomePage() {
       }}
       leads={leads}
       profiles={profiles}
+      campaigns={campaigns}
     />
   );
 }
