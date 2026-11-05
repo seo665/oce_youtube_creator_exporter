@@ -134,3 +134,6 @@ create policy "Workers update assigned leads"
 on public.leads for update to authenticated
 using (assigned_to = (select auth.uid()))
 with check (assigned_to = (select auth.uid()));
+
+grant select on public.profiles to authenticated;
+grant select, insert, update, delete on public.leads to authenticated;

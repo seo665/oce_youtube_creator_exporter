@@ -6,7 +6,8 @@ Private CRM for the single OnlyFans-related YouTube search run from November 5, 
 
 - Email-and-password sign-in for invited accounts only, with email-based password setup and recovery.
 - Admin and worker roles. Admins see every lead and can assign leads; workers see and update only leads assigned to them.
-- Search and status filters, lead details, team notes, assignment, and follow-up dates.
+- Search and status filters, including a split between leads with a listed public email and leads needing manual email research. CSV exports follow the active filters.
+- Lead details, team notes, assignment, and follow-up dates.
 - Due and overdue follow-ups are highlighted in the dashboard. The app does not send reminder or outreach emails.
 - CSV export for the records visible to the signed-in user.
 - Row-level security in Supabase; the service-role key is used only by the server to send worker invitations.

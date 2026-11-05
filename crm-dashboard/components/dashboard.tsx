@@ -25,12 +25,15 @@ type Props = {
   profiles: CrmProfile[];
 };
 
+type EmailFilter = "all" | "has_email" | "manual_check";
+
 export default function Dashboard({ currentUser, leads: initialLeads, profiles }: Props) {
   const router = useRouter();
   const [leads, setLeads] = useState(initialLeads);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [emailFilter, setEmailFilter] = useState<EmailFilter>("all");
   const [followUpOnly, setFollowUpOnly] = useState(false);
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState("");
@@ -42,11 +45,14 @@ export default function Dashboard({ currentUser, leads: initialLeads, profiles }
   const dueCount = leads.filter(
     (lead) => lead.follow_up_date && lead.follow_up_date <= today && !isClosed(lead.crm_status),
   ).length;
-  const emailCount = leads.filter((lead) => lead.public_email).length;
+  const emailCount = leads.filter((lead) => hasPublicEmail(lead)).length;
+  const manualCheckCount = leads.length - emailCount;
   const filteredLeads = useMemo(() => {
     const query = search.trim().toLowerCase();
     return leads.filter((lead) => {
       if (statusFilter !== "all" && lead.crm_status !== statusFilter) return false;
+      if (emailFilter === "has_email" && !hasPublicEmail(lead)) return false;
+      if (emailFilter === "manual_check" && hasPublicEmail(lead)) return false;
       if (followUpOnly && (!lead.follow_up_date || lead.follow_up_date > today || isClosed(lead.crm_status))) {
         return false;
       }
@@ -62,7 +68,7 @@ export default function Dashboard({ currentUser, leads: initialLeads, profiles }
         .toLowerCase();
       return haystack.includes(query);
     });
-  }, [followUpOnly, leads, search, statusFilter, today]);
+  }, [emailFilter, followUpOnly, leads, search, statusFilter, today]);
 
   async function handleSave(input: {
     status: LeadStatus;
@@ -144,7 +150,13 @@ export default function Dashboard({ currentUser, leads: initialLeads, profiles }
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = "creator-crm-leads.csv";
+    const exportName =
+      emailFilter === "has_email"
+        ? "creator-crm-public-emails.csv"
+        : emailFilter === "manual_check"
+          ? "creator-crm-manual-email-check.csv"
+          : "creator-crm-leads.csv";
+    link.download = exportName;
     link.click();
     URL.revokeObjectURL(url);
   }
@@ -218,8 +230,8 @@ export default function Dashboard({ currentUser, leads: initialLeads, profiles }
           <section className="stats-grid" aria-label="Lead summary">
             <StatCard label="Total leads" value={leads.length.toLocaleString()} icon="▦" detail="From the latest search" />
             <StatCard label="Public emails" value={emailCount.toLocaleString()} icon="✉" detail="Listed publicly by creators" />
+            <StatCard label="Manual email check" value={manualCheckCount.toLocaleString()} icon="⌕" detail="No public email listed" />
             <StatCard label="Needs follow-up" value={dueCount.toLocaleString()} icon="◷" detail="Due today or overdue" accent={dueCount > 0} />
-            <StatCard label="Qualified" value={leads.filter((lead) => lead.crm_status === "qualified").length.toLocaleString()} icon="✳" detail="Marked by your team" />
           </section>
 
           {dueCount > 0 && !followUpOnly && (
@@ -234,7 +246,7 @@ export default function Dashboard({ currentUser, leads: initialLeads, profiles }
             <div className="panel-heading">
               <div>
                 <h2>Creator leads <span className="heading-count">{filteredLeads.length}</span></h2>
-                <p>Search creators, public emails, or topics from their videos.</p>
+                <p>Separate leads with a listed email from those needing manual contact research.</p>
               </div>
               {followUpOnly && (
                 <button className="text-button clear-filter" onClick={() => setFollowUpOnly(false)}>
@@ -252,6 +264,14 @@ export default function Dashboard({ currentUser, leads: initialLeads, profiles }
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                 />
+              </label>
+              <label className="filter-select">
+                <span>Email</span>
+                <select value={emailFilter} onChange={(event) => setEmailFilter(event.target.value as EmailFilter)}>
+                  <option value="all">All leads ({leads.length.toLocaleString()})</option>
+                  <option value="has_email">Has public email ({emailCount.toLocaleString()})</option>
+                  <option value="manual_check">Needs manual check ({manualCheckCount.toLocaleString()})</option>
+                </select>
               </label>
               <label className="filter-select">
                 <span>Status</span>
@@ -470,6 +490,10 @@ function initials(value: string) {
     .slice(0, 2)
     .map((part) => part[0].toUpperCase())
     .join("") || "C";
+}
+
+function hasPublicEmail(lead: Lead) {
+  return Boolean(lead.public_email.trim());
 }
 
 function formatCount(value: number | null) {
