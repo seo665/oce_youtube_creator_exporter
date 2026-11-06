@@ -14,9 +14,12 @@ export default function ScrapeCampaignForm({ campaigns }: { campaigns: ScrapeCam
   const [keywordsText, setKeywordsText] = useState("");
   const [maxResults, setMaxResults] = useState(25);
   const [searchMode, setSearchMode] = useState<SearchMode>("both");
+  const [campaignSearch, setCampaignSearch] = useState("");
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState("");
   const [message, setMessage] = useState("");
+  const [suggestionPrompt, setSuggestionPrompt] = useState("");
+  const [suggestionMessage, setSuggestionMessage] = useState("");
   const [error, setError] = useState("");
 
   const keywords = useMemo(() => parseKeywords(keywordsText), [keywordsText]);
@@ -24,9 +27,44 @@ export default function ScrapeCampaignForm({ campaigns }: { campaigns: ScrapeCam
     () => new Set(campaigns.flatMap((campaign) => campaign.keywords.map(normalizeKeyword))),
     [campaigns],
   );
+  const filteredCampaigns = useMemo(() => {
+    const query = campaignSearch.trim().toLocaleLowerCase();
+    if (!query) return campaigns;
+    return campaigns.filter((campaign) =>
+      campaign.name.toLocaleLowerCase().includes(query) ||
+      campaign.keywords.some((keyword) => keyword.toLocaleLowerCase().includes(query)),
+    );
+  }, [campaignSearch, campaigns]);
   const repeatedKeywords = keywords.filter((keyword) => usedKeywords.has(normalizeKeyword(keyword)));
   const searchTypes = searchMode === "both" ? ["channel", "video"] : [searchMode];
   const estimatedSearchUnits = keywords.length * searchTypes.length * 100;
+
+  function getKeywordSuggestions() {
+    const usedPhrases = [...usedKeywords].sort();
+    const prompt = [
+      "Suggest exactly 20 fresh YouTube search phrases for finding public channels that discuss OnlyFans creator topics, education, services, tools, or business.",
+      "Every phrase must include the exact word OnlyFans, be meaningfully distinct from the other suggestions, and be suitable as a YouTube search query.",
+      "Do not repeat or closely paraphrase any phrase in this used-phrase list:",
+      usedPhrases.length ? usedPhrases.map((phrase) => `- ${phrase}`).join("\n") : "- No phrases have been used yet.",
+      "Return only the 20 phrases, one per line, without numbering or commentary.",
+    ].join("\n\n");
+    setSuggestionPrompt(prompt);
+    setSuggestionMessage("");
+    window.open("https://chatgpt.com/", "_blank", "noopener,noreferrer");
+    void navigator.clipboard.writeText(prompt).then(
+      () => setSuggestionMessage("Prompt copied. Paste it into the ChatGPT tab, then paste its 20 lines into Search phrases."),
+      () => setSuggestionMessage("Automatic copy failed. Copy the prompt from the box below, then paste it into ChatGPT."),
+    );
+  }
+
+  async function copySuggestionPrompt() {
+    try {
+      await navigator.clipboard.writeText(suggestionPrompt);
+      setSuggestionMessage("Prompt copied. Paste it into ChatGPT, then paste its 20 lines into Search phrases.");
+    } catch {
+      setSuggestionMessage("Could not copy automatically. Select and copy the prompt from the box below.");
+    }
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -185,18 +223,58 @@ export default function ScrapeCampaignForm({ campaigns }: { campaigns: ScrapeCam
       </form>
 
       <div className="campaign-history">
-        <h3>Campaign history</h3>
+        <div className="campaign-history-heading">
+          <div>
+            <h3>Used search phrases</h3>
+            <p>{usedKeywords.size} unique phrases across {campaigns.length} campaigns. Previously used phrases are flagged above.</p>
+          </div>
+          <div className="campaign-history-actions">
+            <button className="button button-secondary" type="button" onClick={getKeywordSuggestions} disabled={busy}>
+              Suggest 20 fresh keywords
+            </button>
+            {campaigns.length > 0 && (
+              <input
+                aria-label="Search campaign names and used phrases"
+                type="search"
+                value={campaignSearch}
+                onChange={(event) => setCampaignSearch(event.target.value)}
+                placeholder="Find a used phrase…"
+              />
+            )}
+          </div>
+        </div>
+        {suggestionMessage && (
+          <p className="form-message">{suggestionMessage}</p>
+        )}
+        {suggestionPrompt && (
+          <div className="suggestion-prompt">
+            <textarea aria-label="Keyword suggestion prompt to paste into ChatGPT" readOnly rows={5} value={suggestionPrompt} />
+            <button className="text-button" type="button" onClick={() => void copySuggestionPrompt()}>
+              Copy prompt again
+            </button>
+          </div>
+        )}
         {campaigns.length === 0 ? (
-          <p className="muted-text">Your completed campaigns will appear here.</p>
+          <p className="muted-text">Campaign names and used phrases will appear here after your first scrape.</p>
+        ) : filteredCampaigns.length === 0 ? (
+          <p className="muted-text">No campaign or phrase matches that search.</p>
         ) : (
           <ul>
-            {campaigns.map((campaign) => (
+            {filteredCampaigns.map((campaign) => (
               <li key={campaign.id}>
                 <div>
                   <strong>{campaign.name}</strong>
                   <span>
                     {campaign.keywords.length} phrases · {campaign.unique_leads} unique leads · {campaign.duplicates} duplicates · {formatDate(campaign.created_at)}
                   </span>
+                  <details className="campaign-keyword-list">
+                    <summary>{campaign.keywords.length} used {campaign.keywords.length === 1 ? "phrase" : "phrases"}</summary>
+                    <ul>
+                      {campaign.keywords.map((keyword) => (
+                        <li key={normalizeKeyword(keyword)}>{keyword}</li>
+                      ))}
+                    </ul>
+                  </details>
                 </div>
                 {campaign.status === "running" ? (
                   <button className="text-button" type="button" onClick={() => void resumeCampaign(campaign)} disabled={busy}>

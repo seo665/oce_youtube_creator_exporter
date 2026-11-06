@@ -37,7 +37,7 @@ export default function Dashboard({ currentUser, leads: initialLeads, profiles, 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [emailFilter, setEmailFilter] = useState<EmailFilter>("all");
-  const [duplicateFilter, setDuplicateFilter] = useState<DuplicateFilter>("all");
+  const [duplicateFilter, setDuplicateFilter] = useState<DuplicateFilter>("new");
   const [relevanceFilter, setRelevanceFilter] = useState<RelevanceFilter>("all");
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState("");
@@ -48,6 +48,7 @@ export default function Dashboard({ currentUser, leads: initialLeads, profiles, 
   const emailCount = leads.filter((lead) => hasPublicEmail(lead)).length;
   const manualCheckCount = leads.length - emailCount;
   const duplicateCount = leads.filter((lead) => lead.scrape_count > 1).length;
+  const mainPoolCount = leads.length - duplicateCount;
   const relevanceReviewCount = leads.filter((lead) => !mentionsOnlyFansInSearchMatch(lead)).length;
   const filteredLeads = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -280,11 +281,11 @@ export default function Dashboard({ currentUser, leads: initialLeads, profiles, 
                 </select>
               </label>
               <label className="filter-select">
-                <span>Campaigns</span>
+                <span>Lead pool</span>
                 <select value={duplicateFilter} onChange={(event) => setDuplicateFilter(event.target.value as DuplicateFilter)}>
-                  <option value="all">All creators</option>
+                  <option value="new">Main pool — hide repeats ({mainPoolCount.toLocaleString()})</option>
                   <option value="duplicates">Repeat creators ({duplicateCount.toLocaleString()})</option>
-                  <option value="new">Single campaign only</option>
+                  <option value="all">All leads ({leads.length.toLocaleString()})</option>
                 </select>
               </label>
             </div>

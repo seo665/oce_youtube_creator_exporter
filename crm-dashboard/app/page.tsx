@@ -71,26 +71,36 @@ export default async function HomePage() {
   let profiles: CrmProfile[] = [];
   let campaigns: ScrapeCampaign[] = [];
   if (profile.role === "admin") {
-    const [{ data: profileData, error: profilesError }, { data: campaignData, error: campaignsError }] = await Promise.all([
+    const [{ data: profileData, error: profilesError }, campaignsResult] = await Promise.all([
       supabase
       .from("profiles")
       .select("id, email, role")
       .order("email"),
-      supabase
-        .from("scrape_campaigns")
-        .select("id, name, keywords, search_types, max_results, status, completed_keywords, unique_leads, new_leads, duplicates, created_at")
-        .order("created_at", { ascending: false })
-        .limit(25),
+      (async () => {
+        const allCampaigns: ScrapeCampaign[] = [];
+        const campaignPageSize = 500;
+        for (let from = 0; ; from += campaignPageSize) {
+          const { data, error } = await supabase
+            .from("scrape_campaigns")
+            .select("id, name, keywords, search_types, max_results, status, completed_keywords, unique_leads, new_leads, duplicates, created_at")
+            .order("created_at", { ascending: false })
+            .range(from, from + campaignPageSize - 1);
+          if (error) return { campaigns: allCampaigns, error };
+          allCampaigns.push(...((data ?? []) as ScrapeCampaign[]));
+          if (!data || data.length < campaignPageSize) break;
+        }
+        return { campaigns: allCampaigns, error: null };
+      })(),
     ]);
 
     if (profilesError) {
       throw new Error(`Could not load workspace users: ${profilesError.message}`);
     }
-    if (campaignsError) {
-      throw new Error(`Could not load scrape campaigns: ${campaignsError.message}`);
+    if (campaignsResult.error) {
+      throw new Error(`Could not load scrape campaigns: ${campaignsResult.error.message}`);
     }
     profiles = (profileData ?? []) as CrmProfile[];
-    campaigns = (campaignData ?? []) as ScrapeCampaign[];
+    campaigns = campaignsResult.campaigns;
   }
 
   return (

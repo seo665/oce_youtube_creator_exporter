@@ -6,7 +6,7 @@ Private workspace for running YouTube creator research campaigns and organizing 
 
 - Email-and-password sign-in for invited accounts only, with email-based password setup and recovery.
 - Admin and worker roles. Admins see every lead and can assign leads; workers see and update only leads assigned to them.
-- Search and status filters, including a split between leads with a listed public email and leads needing manual email research. Separate filters flag repeat creators and put results whose matched titles/descriptions do not mention “OnlyFans” into a relevance-review bucket. Search phrases themselves do not determine this classification, and review leads remain in the pool. CSV exports follow the active filters and include duplicate and relevance labels.
+- Search and status filters, including a split between leads with a listed public email and leads needing manual email research. The main pool hides repeat creators by default; separate pool options show repeats or all creators. A searchable campaign history lists used phrases to help avoid rerunning the same searches. Separate filters flag repeat creators and put results whose matched titles/descriptions do not mention “OnlyFans” into a relevance-review bucket. Search phrases themselves do not determine this classification, and review leads remain in the pool. CSV exports follow the active filters and include duplicate and relevance labels.
 - Campaign history records the phrases used, completion progress, lead totals, and duplicate matches.
 - Public emails are extracted only from YouTube channel descriptions. The app does not verify email addresses or send outreach.
 - CSV export for the records visible to the signed-in user.
